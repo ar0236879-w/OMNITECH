@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMNI-TECH | Advanced Scientific Calculator</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* --- CORE VARIABLES & RESET --- */
+        :root {
+            --bg-deep: #030508;
+            --bg-panel: rgba(10, 15, 30, 0.65);
+            --primary: #00f3ff; /* Cyan Neon */
+            --secondary: #bc13fe; /* Purple Neon */
+            --accent: #ffffff;
+            --text-main: #e0e6ed;
+            --text-dim: #94a3b8;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --danger: #ff2a6d;
+            --success: #05ffa1;
+            
+            --blur-strength: 24px;
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            overflow: hidden; /* Prevent body scroll, handle internally */
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- 3D BACKGROUND --- */
+        #canvas-container {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            pointer-events: none; /* Let clicks pass through */
+        }
+
+        /* --- LAYOUT GRID --- */
+        .app-wrapper {
+            display: grid;
+            grid-template-columns: 80px 1fr 300px;
+            grid-template-rows: 1fr auto;
+            height: 100%;
+            width: 100%;
+            padding: 20px;
+            gap: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* --- SIDEBAR NAV --- */
+        .sidebar {
+            background: var(--bg-panel);
+            backdrop-filter: blur(var(--blur-strength));
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 0;
+            gap: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .nav-item {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-dim);
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+        }
+
+        .nav-item:hover {
+            background: rgba(255,255,255,0.05);
+            color: var(--primary);
+            transform: scale(1.1);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, rgba(0, 243, 255, 0.1), rgba(188, 19, 254, 0.1));
+            color: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+        }
+
+        .nav-tooltip {
+            position: absolute;
+            left: 70px;
+            background: var(--bg-panel);
+            border: 1px solid var(--glass-border);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.75rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .nav-item:hover .nav-tooltip { opacity: 1; left: 60px; }
+
+        /* --- MAIN CALCULATOR AREA --- */
+        .main-stage {
+            background: var(--bg-panel);
+            backdrop-filter: blur(var(--blur-strength));
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .brand-logo {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* --- DISPLAY SCREEN --- */
+        .display-screen {
+            background: #000000;
+            border-radius: 16px;
+            padding: 25px;
+            text-align: right;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .display-screen::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            animation: scanline 3s linear infinite;
+        }
+
+        @keyframes scanline {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .expression-line {
+            font-family: 'Orbitron', monospace;
+            color: var(--text-dim);
+            font-size: 1rem;
+            min-height: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .result-line {
+            font-family: 'Orbitron', monospace;
+            color: var(--primary);
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-shadow: 0 0 15px rgba(0, 243, 255, 0.4);
+            word-break: break-all;
+        }
+
+        /* --- INTERACTION AREA (KEYPAD vs FORM) --- */
+        .interaction-area {
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            transition: all 0.5s ease;
+        }
+        
+        /* Form Mode Styles */
+        .interaction-area.form-mode {
+            grid-template-columns: 1fr;
+            grid-template-rows: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            animation: slideUp 0.4s ease forwards;
+        }
+
+        .input-label {
+            color: var(--primary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .sci-input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            padding: 15px;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+            font-family: 'Orbitron', monospace;
+            transition: var(--transition);
+        }
+        .sci-input:focus { border-color: var(--primary); box-shadow: 0 0 10px rgba(0, 243, 255, 0.2); }
+
+        /* Keypad Styles */
+        .key {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.4rem;
+            font-weight: 500;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: all 0.1s;
+            user-select: none;
+            font-family: 'Orbitron', monospace;
+        }
+
+        .key:hover { background: rgba(255,255,255,0.08); transform: translateY(-2px); }
+        .key:active { transform: scale(0.95); }
+
+        .key.op { color: var(--primary); font-size: 1.5rem; }
+        .key.fn { color: var(--secondary); font-size: 1.1rem; }
+        .key.eq {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: #fff;
+            grid-column: span 2;
+            box-shadow: 0 4px 15px rgba(188, 19, 254, 0.3);
+        }
+        .key.eq:hover { box-shadow: 0 6px 20px rgba(188, 19, 254, 0.5); }
+        .key.ac { color: var(--danger); }
+
+        /* --- HISTORY / INFO PANEL --- */
+        .info-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(var(--blur-strength));
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .panel-header {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 10px;
+        }
+
+        .history-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-right: 5px;
+        }
+
+        .history-item {
+            padding: 12px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 8px;
+            cursor: pointer;
+            border-left: 2px solid transparent;
+            transition: var(--transition);
+        }
+        .history-item:hover { background: rgba(255,255,255,0.05); border-left-color: var(--secondary); }
+        
+        .hist-exp { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 4px; }
+        .hist-res { font-size: 1.1rem; color: var(--primary); font-family: 'Orbitron', monospace; }
+
+        /* --- FOOTER --- */
+        .footer {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            padding-top: 10px;
+            opacity: 0.6;
+            z-index: 10;
+        }
+        .footer span { color: var(--primary); font-weight: 600; }
+
+        /* --- UTILS --- */
+        .hidden { display: none !important; }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .app-wrapper {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr auto;
+                padding: 10px;
+            }
+            .sidebar { flex-direction: row; height: 60px; padding: 0 20px; justify-content: space-around; order: -1; }
+            .nav-item { width: 40px; height: 40px; }
+            .nav-tooltip { display: none; }
+            .info-panel { display: none; } /* Hide history on mobile */
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <div class="app-wrapper">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="nav-item active" onclick="switchMode('scientific')" title="Scientific Mode">
+                <i class="fa-solid fa-calculator"></i>
+                <span class="nav-tooltip">Scientific</span>
+            </div>
+            <div class="nav-item" onclick="switchMode('physics')" title="Physics Module">
+                <i class="fa-solid fa-atom"></i>
+                <span class="nav-tooltip">Physics</span>
+            </div>
+            <div class="nav-item" onclick="switchMode('chemistry')" title="Chemistry Module">
+                <i class="fa-solid fa-flask"></i>
+                <span class="nav-tooltip">Chemistry</span>
+            </div>
+            <div class="nav-item" onclick="switchMode('biology')" title="Biology Module">
+                <i class="fa-solid fa-dna"></i>
+                <span class="nav-tooltip">Biology</span>
+            </div>
+            <div class="nav-item" onclick="switchMode('temp')" title="Temp Converter">
+                <i class="fa-solid fa-temperature-three-quarters"></i>
+                <span class="nav-tooltip">Temperature</span>
+            </div>
+        </nav>
+
+        <!-- Main Stage -->
+        <main class="main-stage">
+            <div class="header-bar">
+                <div class="brand-logo">OMNI<span style="font-weight:300; color:white;">TECH</span></div>
+                <div style="font-size: 0.9rem; color: var(--text-dim); text-transform: uppercase;" id="mode-indicator">Scientific Mode</div>
+            </div>
+
+            <div class="display-screen">
+                <div class="expression-line" id="display-exp"></div>
+                <div class="result-line" id="display-res">0</div>
+            </div>
+
+            <!-- SCIENTIFIC KEYPAD -->
+            <div id="keypad-area" class="interaction-area">
+                <!-- Row 1 -->
+                <div class="key fn" onclick="insertFunc('sin')">sin</div>
+                <div class="key fn" onclick="insertFunc('cos')">cos</div>
+                <div class="key fn" onclick="insertFunc('tan')">tan</div>
+                <div class="key ac" onclick="clearAll()">AC</div>
+                
+                <!-- Row 2 -->
+                <div class="key fn" onclick="insertFunc('log')">log</div>
+                <div class="key fn" onclick="insertFunc('ln')">ln</div>
+                <div class="key fn" onclick="insert('(')">(</div>
+                <div class="key fn" onclick="insert(')')">)</div>
+
+                <!-- Row 3 -->
+                <div class="key fn" onclick="insertFunc('sqrt')">√</div>
+                <div class="key fn" onclick="insert('^')">^</div>
+                <div class="key fn" onclick="insert('%')">%</div>
+                <div class="key op" onclick="insert('/')">÷</div>
+
+                <!-- Row 4 -->
+                <div class="key" onclick="insert('7')">7</div>
+                <div class="key" onclick="insert('8')">8</div>
+                <div class="key" onclick="insert('9')">9</div>
+                <div class="key op" onclick="insert('*')">×</div>
+
+                <!-- Row 5 -->
+                <div class="key" onclick="insert('4')">4</div>
+                <div class="key" onclick="insert('5')">5</div>
+                <div class="key" onclick="insert('6')">6</div>
+                <div class="key op" onclick="insert('-')">−</div>
+
+                <!-- Row 6 -->
+                <div class="key" onclick="insert('1')">1</div>
+                <div class="key" onclick="insert('2')">2</div>
+                <div class="key" onclick="insert('3')">3</div>
+                <div class="key op" onclick="insert('+')">+</div>
+
+                <!-- Row 7 -->
+                <div class="key" onclick="insert('0')">0</div>
+                <div class="key" onclick="insert('.')">.</div>
+                <div class="key" onclick="backspace()"><i class="fa-solid fa-delete-left"></i></div>
+                <div class="key eq" onclick="calculate()">=</div>
+            </div>
+
+            <!-- FORM AREA (Dynamic for Sci-Tech) -->
+            <div id="form-area" class="interaction-area form-mode hidden">
+                <!-- Injected via JS -->
+            </div>
+
+        </main>
+
+        <!-- Right Panel -->
+        <aside class="info-panel">
+            <div class="panel-header">Calculation Log</div>
+            <div class="history-list" id="history-list">
+                <!-- Items -->
+            </div>
+            <button onclick="clearHistory()" style="padding: 10px; background: rgba(255,255,255,0.05); border:1px solid var(--glass-border); color:white; cursor:pointer; border-radius:8px; margin-top:auto;">Clear Log</button>
+        </aside>
+
+        <!-- FOOTER -->
+        <div class="footer">
+            Created by <span>Reski Ardiansyah</span> &nbsp;|&nbsp; Instagram: <span>@ikky05__</span>
+        </div>
+    </div>
+
+    <script>
+        /* ----------------------------------------------------------------
+           1. THREE.JS VISUAL ENGINE (BIG & CLEAR SYMBOLS)
+        ---------------------------------------------------------------- */
+        const initVisuals = () => {
+            const container = document.getElementById('canvas-container');
+            const scene = new THREE.Scene();
+            // Fog to create depth
+            scene.fog = new THREE.FogExp2(0x030508, 0.0015);
+
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Perf optimization
+            container.appendChild(renderer.domElement);
+
+            // --- 1. Particle Starfield (Subtle background) ---
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsCount = 800;
+            const posArray = new Float32Array(starsCount * 3);
+            for(let i=0; i<starsCount*3; i++) {
+                posArray[i] = (Math.random() - 0.5) * 100;
+            }
+            starsGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+            const starsMaterial = new THREE.PointsMaterial({ size: 0.05, color: 0xffffff, transparent: true, opacity: 0.4 });
+            const starMesh = new THREE.Points(starsGeometry, starsMaterial);
+            scene.add(starMesh);
+
+            // --- 2. FLOATING BIG MATH SYMBOLS (Updated) ---
+            const symbols = ['+', '-', '×', '÷', '=', 'π', '√', '∑', 'x', 'y', '∫', '∞', 'sin', 'cos'];
+            const symbolGroup = new THREE.Group();
+            
+            symbols.forEach(sym => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // HIGH RESOLUTION & SIZE
+                canvas.width = 512; 
+                canvas.height = 512;
+                
+                ctx.translate(256, 256); // Center context
+
+                // Glow Effect
+                ctx.shadowBlur = 40; 
+                ctx.shadowColor = "#00f3ff";
+
+                // Font Size (BIGGER)
+                ctx.font = 'bold 350px Orbitron';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Draw Text (Brighter and Clearer)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; 
+                ctx.fillText(sym, 0, 0);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                
+                // Use AdditiveBlending for Neon look
+                const material = new THREE.SpriteMaterial({ 
+                    map: texture, 
+                    transparent: true, 
+                    opacity: 0.6, 
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending 
+                });
+                
+                const sprite = new THREE.Sprite(material);
+                
+                // Random Position (Spread wide)
+                sprite.position.set(
+                    (Math.random() - 0.5) * 100,
+                    (Math.random() - 0.5) * 100,
+                    (Math.random() - 0.5) * 40 - 10
+                );
+
+                // Random Scale (BIG)
+                const scaleVal = 12 + Math.random() * 12; // Scale between 12 and 24 units
+                sprite.scale.set(scaleVal, scaleVal, 1);
+                
+                // Save initial position for animation
+                sprite.userData = { 
+                    initialY: sprite.position.y, 
+                    speed: 0.5 + Math.random() * 0.5 
+                };
+
+                symbolGroup.add(sprite);
+            });
+            scene.add(symbolGroup);
+
+            camera.position.z = 30;
+
+            // Mouse Parallax
+            let mouseX = 0, mouseY = 0;
+            let targetX = 0, targetY = 0;
+            const windowHalfX = window.innerWidth / 2;
+            const windowHalfY = window.innerHeight / 2;
+
+            document.addEventListener('mousemove', (e) => {
+                mouseX = (e.clientX - windowHalfX);
+                mouseY = (e.clientY - windowHalfY);
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            const clock = new THREE.Clock();
+
+            const animate = () => {
+                requestAnimationFrame(animate);
+                const t = clock.getElapsedTime();
+
+                targetX = mouseX * 0.001;
+                targetY = mouseY * 0.001;
+
+                // Smooth Rotation (Parallax)
+                symbolGroup.rotation.y += 0.001;
+                symbolGroup.rotation.x += 0.0005;
+                symbolGroup.rotation.y += 0.05 * (targetX - symbolGroup.rotation.y);
+                symbolGroup.rotation.x += 0.05 * (targetY - symbolGroup.rotation.x);
+
+                // Floating Effect for individual symbols (More Visible)
+                symbolGroup.children.forEach((sprite, i) => {
+                    sprite.position.y = sprite.userData.initialY + Math.sin(t * sprite.userData.speed + i) * 2;
+                });
+
+                // Starfield slow drift
+                starMesh.rotation.y = -t * 0.02;
+
+                renderer.render(scene, camera);
+            };
+            animate();
+        };
+
+        /* ----------------------------------------------------------------
+           2. CORE CALCULATOR LOGIC & STATE MANAGEMENT
+        ---------------------------------------------------------------- */
+        const state = {
+            currentMode: 'scientific', // scientific, physics, chemistry, biology, temp
+            expression: '',
+            result: '0'
+        };
+
+        const displayExp = document.getElementById('display-exp');
+        const displayRes = document.getElementById('display-res');
+        const keypadArea = document.getElementById('keypad-area');
+        const formArea = document.getElementById('form-area');
+        const modeIndicator = document.getElementById('mode-indicator');
+
+        // --- SCIENTIFIC MODE FUNCTIONS ---
+        function updateDisplay() {
+            displayExp.innerText = state.expression;
+            displayRes.innerText = state.result;
+        }
+
+        function insert(val) {
+            if(state.expression === 'Error') clearAll();
+            state.expression += val;
+            updateDisplay();
+        }
+
+        function insertFunc(fn) {
+            if(state.expression === 'Error') clearAll();
+            if(fn === 'sqrt') state.expression += 'Math.sqrt(';
+            else if(fn === 'log') state.expression += 'Math.log10(';
+            else if(fn === 'ln') state.expression += 'Math.log(';
+            else if(fn === 'sin') state.expression += 'Math.sin('; // Assume radians for code simplicity, or handled later
+            else if(fn === 'cos') state.expression += 'Math.cos(';
+            else if(fn === 'tan') state.expression += 'Math.tan(';
+            else state.expression += fn + '(';
+            updateDisplay();
+        }
+
+        function clearAll() {
+            state.expression = '';
+            state.result = '0';
+            updateDisplay();
+        }
+
+        function backspace() {
+            state.expression = state.expression.slice(0, -1);
+            updateDisplay();
+        }
+
+        function calculate() {
+            try {
+                if(!state.expression) return;
+                // Evaluate safely (basic security)
+                // Replacing visual symbols with JS Math equivalents for eval
+                let evalString = state.expression.replace(/×/g, '*').replace(/÷/g, '/').replace(/\^/g, '**');
+                
+                // Handle percentage
+                if(evalString.includes('%')) {
+                    evalString = evalString.replace(/(\d+)%/g, '($1/100)');
+                }
+
+                const res = eval(evalString); // In production, use a parser library
+                const finalRes = Math.round(res * 100000) / 100000;
+                
+                state.result = finalRes;
+                addToHistory(state.expression, finalRes);
+                state.expression = finalRes.toString();
+                updateDisplay();
+            } catch (e) {
+                state.result = 'Error';
+                state.expression = '';
+                updateDisplay();
+            }
+        }
+
+        // --- MODULE CONFIGURATIONS ---
+        const modules = {
+            physics: {
+                name: 'Physics Module',
+                tools: {
+                    velocity: { name: 'Kecepatan (v = s/t)', inputs: [['Jarak (m)', 's'], ['Waktu (s)', 't']], formula: (vals) => vals.s / vals.t },
+                    force: { name: 'Gaya (F = ma)', inputs: [['Massa (kg)', 'm'], ['Percepatan (m/s²)', 'a']], formula: (vals) => vals.m * vals.a },
+                    energy: { name: 'Energi Kinetik (Ek = ½mv²)', inputs: [['Massa (kg)', 'm'], ['Kecepatan (m/s)', 'v']], formula: (vals) => 0.5 * vals.m * Math.pow(vals.v, 2) },
+                    pressure: { name: 'Tekanan (P = F/A)', inputs: [['Gaya (N)', 'F'], ['Luas Area (m²)', 'A']], formula: (vals) => vals.F / vals.A }
+                }
+            },
+            chemistry: {
+                name: 'Chemistry Module',
+                tools: {
+                    mol: { name: 'Mol (n = m/M)', inputs: [['Massa (gram)', 'm'], ['Massa Molar (g/mol)', 'M']], formula: (vals) => vals.m / vals.M },
+                    molarity: { name: 'Molaritas (M = n/V)', inputs: [['Mol (mol)', 'n'], ['Volume (Liter)', 'V']], formula: (vals) => vals.n / vals.V }
+                }
+            },
+            biology: {
+                name: 'Biology Module',
+                tools: {
+                    growth: { name: 'Pertumbuhan (P = P0 * e^rt)', inputs: [['Populasi Awal', 'P0'], ['Waktu', 't'], ['Laju (%)', 'r']], formula: (vals) => vals.P0 * Math.exp((vals.r/100) * vals.t) }
+                }
+            },
+            temp: {
+                name: 'Temperature Converter',
+                tools: {
+                    convert: { 
+                        name: 'Konversi Suhu', 
+                        inputs: [['Nilai', 'val'], ['Dari', 'from'], ['Ke', 'to']], 
+                        isSelect: true,
+                        selectOptions: ['Celsius (°C)', 'Fahrenheit (°F)', 'Kelvin (K)', 'Reamur (°R)'],
+                        formula: (vals) => {
+                            let v = parseFloat(vals.val);
+                            let f = vals.from.split(' ')[0];
+                            let t = vals.to.split(' ')[0];
+                            let c; // intermediate Celsius
+                            
+                            if(f === 'Celsius') c = v;
+                            if(f === 'Fahrenheit') c = (v-32)*5/9;
+                            if(f === 'Kelvin') c = v-273.15;
+                            if(f === 'Reamur') c = v*5/4;
+                            
+                            if(t === 'Celsius') return c;
+                            if(t === 'Fahrenheit') return (c*9/5)+32;
+                            if(t === 'Kelvin') return c+273.15;
+                            if(t === 'Reamur') return c*4/5;
+                            return c;
+                        }
+                    }
+                }
+            }
+        };
+
+        // --- UI RENDERER FOR FORMS ---
+        let activeModule = null;
+        let activeToolKey = null;
+
+        function renderToolSelector(modKey) {
+            const mod = modules[modKey];
+            const selectHTML = `
+                <div class="input-group">
+                    <label class="input-label">Pilih Alat</label>
+                    <select id="tool-select" onchange="loadToolFields('${modKey}', this.value)" style="background:var(--bg-deep); border:1px solid var(--glass-border); padding:15px; color:white; border-radius:12px;">
+                        ${Object.keys(mod.tools).map(k => `<option value="${k}">${mod.tools[k].name}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+            formArea.innerHTML = selectHTML + '<div id="dynamic-fields"></div>';
+            loadToolFields(modKey, Object.keys(mod.tools)[0]);
+        }
+
+        function loadToolFields(modKey, toolKey) {
+            activeModule = modKey;
+            activeToolKey = toolKey;
+            const tool = modules[modKey].tools[toolKey];
+            const container = document.getElementById('dynamic-fields');
+            
+            let html = '';
+            tool.inputs.forEach((inp, idx) => {
+                const id = `inp-${idx}`;
+                let inputField = `<input type="number" id="${id}" class="sci-input" placeholder="${inp[1]}">`;
+                
+                if(tool.isSelect && idx > 0) {
+                    inputField = `
+                    <select id="${id}" class="sci-input">
+                        ${tool.selectOptions.map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                    </select>`;
+                }
+
+                html += `
+                    <div class="input-group" style="animation-delay: ${idx * 0.1}s">
+                        <label class="input-label">${inp[0]}</label>
+                        ${inputField}
+                    </div>
+                `;
+            });
+
+            html += `<button onclick="runToolCalculation()" class="key eq" style="margin-top:10px; height:60px;">HITUNG</button>`;
+            container.innerHTML = html;
+        }
+
+        function runToolCalculation() {
+            const tool = modules[activeModule].tools[activeToolKey];
+            const inputs = {};
+            tool.inputs.forEach((inp, idx) => {
+                inputs[inp[1]] = document.getElementById(`inp-${idx}`).value;
+            });
+
+            try {
+                const res = tool.formula(inputs);
+                const resFixed = (res % 1 === 0) ? res : res.toFixed(4);
+                state.result = resFixed;
+                displayExp.innerText = `${tool.name}`;
+                displayRes.innerText = resFixed;
+                addToHistory(tool.name, resFixed);
+            } catch(e) {
+                displayRes.innerText = "Error";
+            }
+        }
+
+        // --- MODE SWITCHER ---
+        function switchMode(mode) {
+            // UI Toggles
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active'); // Assumes called from click
+
+            state.currentMode = mode;
+            modeIndicator.innerText = mode.charAt(0).toUpperCase() + mode.slice(1) + ' Mode';
+            
+            // Clear Displays
+            state.expression = '';
+            state.result = '0';
+            updateDisplay();
+
+            if(mode === 'scientific') {
+                keypadArea.classList.remove('hidden');
+                keypadArea.classList.remove('form-mode');
+                formArea.classList.add('hidden');
+            } else {
+                keypadArea.classList.add('hidden');
+                formArea.classList.remove('hidden');
+                formArea.classList.add('form-mode');
+                renderToolSelector(mode);
+            }
+        }
+
+        // --- HISTORY ---
+        function addToHistory(exp, res) {
+            const list = document.getElementById('history-list');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `<div class="hist-exp">${exp}</div><div class="hist-res">${res}</div>`;
+            item.onclick = () => {
+                if(state.currentMode === 'scientific') {
+                    state.expression = res.toString();
+                    updateDisplay();
+                }
+            };
+            list.prepend(item);
+        }
+
+        function clearHistory() {
+            document.getElementById('history-list').innerHTML = '';
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            initVisuals();
+        };
+
+    </script>
+</body>
+</html>
